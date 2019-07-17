@@ -1,0 +1,6 @@
+[submodule "allolib"]
+	path = allolib
+	url = https://github.com/AlloSphere-Research-Group/allolib.git
+[submodule "curl"]
+	path = curl
+	url = https://github.com/curl/curl.git
