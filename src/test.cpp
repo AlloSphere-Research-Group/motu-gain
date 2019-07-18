@@ -4,24 +4,49 @@
 #include "al/app/al_App.hpp"
 #include "al/ui/al_ParameterGUI.hpp"
 
+#define USE_CURL
+
+#ifdef USE_CURL
 #include "curl/curl.h"
+#endif
 
 using namespace al;
+
+struct AVBDevice {
+  std::string host;
+  uint16_t oscPort;
+  int bankIndex;
+  size_t numChannels = 64;
+};
+
 
 struct MyApp : App {
 
   ParameterBool mute {"Mute"};
-//  Trigger volumeUp {"+"};
-  float volume = 0.0;
-//  Trigger volumeDown {"+"};
+  Trigger volumeUp {"Up"};
+  float volume = -12.0;
+  Trigger volumeDown {"Down"};
 
-  std::vector<std::pair<uint16_t, std::string>> deviceAddresses = {{3001,"motu0.1g"}, {3001,"motu1.1g"}, {3001,"motu2.1g"}};
+  std::vector<AVBDevice> devices = {
+    {"motu00.1g", 9998, 0, 16},
+    {"motu01.1g", 9998, 0, 24},
+    {"motu02.1g", 9998, 0, 24},
+  };
 
   void onCreate() override {
     al::imguiInit();
 
     mute.registerChangeCallback([&](float value) {
       setMute(value == 1.0f);
+    });
+
+    volumeUp.registerChangeCallback([&](float value) {
+      volume++;
+      setVolume();
+    });
+    volumeDown.registerChangeCallback([&](float value) {
+      volume--;
+      setVolume();
     });
   }
 
@@ -35,6 +60,11 @@ struct MyApp : App {
     ImGui::SetWindowFontScale(4.0);
 
     ParameterGUI::draw(&mute);
+    ParameterGUI::draw(&volumeDown);
+    ImGui::SameLine();
+    ImGui::Text("%i", int(volume));
+    ImGui::SameLine();
+    ParameterGUI::draw(&volumeUp);
 
     ImGui::End();
     al::imguiEndFrame();
@@ -50,78 +80,101 @@ struct MyApp : App {
       ParameterGUI::cleanup();
   }
 
+#ifdef USE_CURL
+
   struct MemoryStruct {
     char *memory;
     size_t size;
   };
+#endif
 
   void setMute(bool isMute) {
-    size_t numChannels = 12;
-    for (auto device: deviceAddresses) {
-      osc::Send sender(device.first, device.second.c_str());
-      for (size_t i = 0; i < numChannels; i++) {
+    for (auto device: devices) {
+      for (size_t i = 0; i < device.numChannels; i++) {
+  #ifdef USE_CURL
+        std::string address = "http://" + device.host + "/datastore/ext/";
+        address += "obank/" + std::to_string(device.bankIndex) + "/";
+        address += "ch/" + std::to_string(i) + "/trim";
+        if (isMute) {
+          std::string data = "json={\"value\":-24}";
+          httpPost(address, data);
+        } else {
+          setVolume();
+        }
+  #else
+        osc::Send sender(device.oscPort.first, device.host.c_str());
         std::string address = "/mix/chan/" + std::to_string(i) + "/matrix/mute";
-//        sender.send(address, isMute ? 1.0f : 0.0f);
+        sender.send(address, isMute ? 1.0f : 0.0f);
+  #endif
+
       }
-//        address = "http://" + device.second + ":" + std::to_string(device.first) + address;
-//        httpGet(address);
+    }
+
+  }
+
+  void setVolume() {
+    for (auto device: devices) {
+      for (size_t i = 0; i < device.numChannels; i++) {
+  #ifdef USE_CURL
+        std::string address = "http://" + device.host + "/datastore/ext/";
+        address += "obank/" + std::to_string(device.bankIndex) + "/";
+        address += "ch/" + std::to_string(i) + "/trim";
+        std::string data = "json={\"value\":" + std::to_string(int(volume)) + "}" ;
+        httpPost(address, data);
+  #else
+        osc::Send sender(device.oscPort.first, device.host.c_str());
+        std::string address = "/mix/chan/" + std::to_string(i) + "/matrix/mute";
+        sender.send(address, isMute ? 1.0f : 0.0f);
+  #endif
+      }
     }
   }
 
   void setLevel(float level) {
-    size_t numChannels = 12;
-    for (auto device: deviceAddresses) {
-      osc::Send sender(device.first, device.second.c_str());
-      for (size_t i = 0; i < numChannels; i++) {
-        std::string address = "/mix/chan/" + std::to_string(i) + "/matrix/fader";
-        sender.send(address, level);
-      }
-//        address = "http://" + device.second + ":" + std::to_string(device.first) + address;
-//        httpGet(address);
-    }
+
   }
 
+#ifdef USE_CURL
   // HTTP requests
-  void httpGet(std::string address) {
+  void httpPost(std::string address, std::string data) {
       CURL *curl_handle;
       CURLcode res;
-
-      struct MemoryStruct chunk;
-
-      chunk.memory = (char *) std::malloc(1);  /* will be grown as needed by the realloc above */
-      chunk.size = 0;    /* no data at this point */
 
       curl_global_init(CURL_GLOBAL_ALL);
 
       curl_handle = curl_easy_init();
       curl_easy_setopt(curl_handle, CURLOPT_URL, address.c_str());
-      curl_easy_setopt(curl_handle, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
-      curl_easy_setopt(curl_handle, CURLOPT_WRITEDATA, (void *)&chunk);
+//      curl_easy_setopt(curl_handle, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
+//      curl_easy_setopt(curl_handle, CURLOPT_WRITEDATA, (void *)&chunk);
+      curl_easy_setopt(curl_handle, CURLOPT_POSTFIELDS, data.data());
+      curl_easy_setopt(curl_handle, CURLOPT_POSTFIELDSIZE, -1L);
       curl_easy_setopt(curl_handle, CURLOPT_USERAGENT, "libcurl-agent/1.0");
 
       res = curl_easy_perform(curl_handle);
   }
 
-  static size_t
-  WriteMemoryCallback(void *contents, size_t size, size_t nmemb, void *userp)
-  {
-    size_t realsize = size * nmemb;
-    struct MemoryStruct *mem = (struct MemoryStruct *)userp;
+//  static size_t
+//  WriteMemoryCallback(void *contents, size_t size, size_t nmemb, void *userp)
+//  {
+//    size_t realsize = size * nmemb;
+//    struct MemoryStruct *mem = (struct MemoryStruct *)userp;
 
-    char *ptr = (char *)realloc(mem->memory, mem->size + realsize + 1);
-    if(ptr == nullptr) {
-      /* out of memory! */
-      printf("not enough memory (realloc returned NULL)\n");
-      return 0;
-    }
+//    char *ptr = (char *)realloc(mem->memory, mem->size + realsize + 1);
+//    if(ptr == nullptr) {
+//      /* out of memory! */
+//      printf("not enough memory (realloc returned NULL)\n");
+//      return 0;
+//    }
 
-    mem->memory = ptr;
-    memcpy(&(mem->memory[mem->size]), contents, realsize);
-    mem->size += realsize;
-    mem->memory[mem->size] = 0;
+//    mem->memory = ptr;
+//    memcpy(&(mem->memory[mem->size]), contents, realsize);
+//    mem->size += realsize;
+//    mem->memory[mem->size] = 0;
 
-    return realsize;
-  }
+//    std::cout << mem->memory <<std::endl;
+//    return realsize;
+//  }
+#endif
 
 };
 
