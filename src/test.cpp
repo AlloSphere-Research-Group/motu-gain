@@ -33,6 +33,9 @@ struct MyApp : App {
     {"motu02.1g", 9998, 0, 24},
   };
 
+  void onInit() override {
+    decorated(false);
+  }
   void onCreate() override {
     al::imguiInit();
 
@@ -57,14 +60,17 @@ struct MyApp : App {
     ImGui::SetNextWindowSize(ImVec2(width(), height()));
     ImGui::Begin("MOTU Control", nullptr, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize );
 
-    ImGui::SetWindowFontScale(4.0);
+    ImGui::SetWindowFontScale(5.0);
 
+    ImGui::PushItemWidth(width());
     ParameterGUI::draw(&mute);
-    ParameterGUI::draw(&volumeDown);
-    ImGui::SameLine();
-    ImGui::Text("%i", int(volume));
-    ImGui::SameLine();
-    ParameterGUI::draw(&volumeUp);
+    if (mute != 1.0f) {
+      ParameterGUI::draw(&volumeDown);
+      ImGui::SameLine();
+      ImGui::Text("%i", int(volume));
+      ImGui::SameLine();
+      ParameterGUI::draw(&volumeUp);
+    }
 
     ImGui::End();
     al::imguiEndFrame();
@@ -89,25 +95,25 @@ struct MyApp : App {
 #endif
 
   void setMute(bool isMute) {
-    for (auto device: devices) {
-      for (size_t i = 0; i < device.numChannels; i++) {
-  #ifdef USE_CURL
-        std::string address = "http://" + device.host + "/datastore/ext/";
-        address += "obank/" + std::to_string(device.bankIndex) + "/";
-        address += "ch/" + std::to_string(i) + "/trim";
-        if (isMute) {
+    if (isMute) {
+      for (auto device: devices) {
+        for (size_t i = 0; i < device.numChannels; i++) {
+#ifdef USE_CURL
+          std::string address = "http://" + device.host + "/datastore/ext/";
+          address += "obank/" + std::to_string(device.bankIndex) + "/";
+          address += "ch/" + std::to_string(i) + "/trim";
           std::string data = "json={\"value\":-24}";
           httpPost(address, data);
-        } else {
-          setVolume();
-        }
-  #else
-        osc::Send sender(device.oscPort.first, device.host.c_str());
-        std::string address = "/mix/chan/" + std::to_string(i) + "/matrix/mute";
-        sender.send(address, isMute ? 1.0f : 0.0f);
-  #endif
+#else
+          osc::Send sender(device.oscPort.first, device.host.c_str());
+          std::string address = "/mix/chan/" + std::to_string(i) + "/matrix/mute";
+          sender.send(address, isMute ? 1.0f : 0.0f);
+#endif
 
+        }
       }
+    } else {
+      setVolume();
     }
 
   }
