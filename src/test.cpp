@@ -4,13 +4,10 @@
 #include "al/app/al_App.hpp"
 #include "al/ui/al_ParameterGUI.hpp"
 
-#define USE_CURL
+//#define USE_CURL
 
 #ifdef USE_CURL
 #include "curl/curl.h"
-#endif
-
-using namespace al;
 
 struct AVBDevice {
   std::string host;
@@ -18,6 +15,10 @@ struct AVBDevice {
   int bankIndex;
   size_t numChannels = 64;
 };
+#endif
+
+using namespace al;
+
 
 
 struct MyApp : App {
@@ -27,15 +28,20 @@ struct MyApp : App {
   float volume = -12.0;
   Trigger volumeDown {"Down"};
 
+#ifdef USE_CURL
   std::vector<AVBDevice> devices = {
     {"motu00.1g", 9998, 0, 16},
     {"motu01.1g", 9998, 0, 24},
     {"motu02.1g", 9998, 0, 24},
   };
+#else
+  std::vector<std::string> simulatorMachines = {"localhost", "audio.1g", "ar01.1g"};
+#endif
 
   void onInit() override {
-    decorated(false);
+//    decorated(false);
   }
+
   void onCreate() override {
     al::imguiInit();
 
@@ -43,13 +49,13 @@ struct MyApp : App {
       setMute(value == 1.0f);
     });
 
-    volumeUp.registerChangeCallback([&](float value) {
+    volumeUp.registerChangeCallback([&](float /*value*/) {
       volume++;
-      setVolume();
+      sendVolume();
     });
-    volumeDown.registerChangeCallback([&](float value) {
+    volumeDown.registerChangeCallback([&](float /*value*/) {
       volume--;
-      setVolume();
+      sendVolume();
     });
   }
 
@@ -96,48 +102,52 @@ struct MyApp : App {
 
   void setMute(bool isMute) {
     if (isMute) {
+#ifdef USE_CURL
       for (auto device: devices) {
         for (size_t i = 0; i < device.numChannels; i++) {
-#ifdef USE_CURL
           std::string address = "http://" + device.host + "/datastore/ext/";
           address += "obank/" + std::to_string(device.bankIndex) + "/";
           address += "ch/" + std::to_string(i) + "/trim";
           std::string data = "json={\"value\":-24}";
           httpPost(address, data);
-#else
-          osc::Send sender(device.oscPort.first, device.host.c_str());
-          std::string address = "/mix/chan/" + std::to_string(i) + "/matrix/mute";
-          sender.send(address, isMute ? 1.0f : 0.0f);
-#endif
-
         }
       }
+#else
+      for (auto host: simulatorMachines) {
+        osc::Send sender(9010, host.c_str());
+        std::string address = "/alloapp/audio/gain";
+        sender.send(address, 0.0f);
+      }
+#endif
     } else {
-      setVolume();
+      sendVolume();
     }
 
   }
 
-  void setVolume() {
+  void sendVolume() {
+#ifdef USE_CURL
     for (auto device: devices) {
       for (size_t i = 0; i < device.numChannels; i++) {
-  #ifdef USE_CURL
+
         std::string address = "http://" + device.host + "/datastore/ext/";
         address += "obank/" + std::to_string(device.bankIndex) + "/";
         address += "ch/" + std::to_string(i) + "/trim";
         std::string data = "json={\"value\":" + std::to_string(int(volume)) + "}" ;
         httpPost(address, data);
-  #else
-        osc::Send sender(device.oscPort.first, device.host.c_str());
-        std::string address = "/mix/chan/" + std::to_string(i) + "/matrix/mute";
-        sender.send(address, isMute ? 1.0f : 0.0f);
-  #endif
-      }
+#else
+
+    for (auto host: simulatorMachines) {
+      osc::Send sender(9010, host.c_str());
+      std::string address = "/alloapp/audio/gain";
+      sender.send(address,20.0f * std::powf(10.0f, volume/ 20.0f));
     }
+#endif
   }
 
   void setLevel(float level) {
-
+    volume = level;
+    sendVolume();
   }
 
 #ifdef USE_CURL
@@ -189,3 +199,5 @@ int main() {
   app.dimensions(600, 400);
   app.start();
 }
+
+
