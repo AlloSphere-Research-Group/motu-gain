@@ -5,10 +5,8 @@ set(APP_NAME allogain)
 
 project(${APP_NAME})
 
-
 # add allolib as a subdirectory to the project
 add_subdirectory(allolib)
-#add_subdirectory(curl)
 
 # path to main source file
 add_executable(${APP_NAME} src/test.cpp)
