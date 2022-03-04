@@ -203,6 +203,8 @@ struct MyApp : App {
 
     int main() {
       MyApp app;
+      app.configureAudio(48000, 512, 0,
+                         0); // 0 channels makes the domain not run
       app.dimensions(600, 400);
       app.start();
     }
