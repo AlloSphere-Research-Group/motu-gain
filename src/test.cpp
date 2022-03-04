@@ -83,7 +83,7 @@ struct MyApp : App {
     al::imguiDraw();
   }
 
-  void onExit() override { ParameterGUI::cleanup(); }
+  void onExit() override {}
 
 #ifdef USE_CURL
 
