@@ -1,6 +1,5 @@
 #include <iostream>
 
-
 #include "al/app/al_App.hpp"
 #include "al/ui/al_ParameterGUI.hpp"
 
@@ -9,45 +8,40 @@
 #ifdef USE_CURL
 #include "curl/curl.h"
 
+#endif
+
 struct AVBDevice {
   std::string host;
   uint16_t oscPort;
   int bankIndex;
   size_t numChannels = 64;
 };
-#endif
 
 using namespace al;
 
-
-
 struct MyApp : App {
 
-  ParameterBool mute {"Mute"};
-  Trigger volumeUp {"Up"};
+  ParameterBool mute{"Mute"};
+  Trigger volumeUp{"Up"};
   float volume = -12.0;
-  Trigger volumeDown {"Down"};
+  Trigger volumeDown{"Down"};
 
-#ifdef USE_CURL
   std::vector<AVBDevice> devices = {
-    {"motu00.1g", 9998, 0, 16},
-    {"motu01.1g", 9998, 0, 24},
-    {"motu02.1g", 9998, 0, 24},
+      {"motu00.1g", 9998, 0, 16},
+      {"motu01.1g", 9998, 0, 24},
+      {"motu02.1g", 9998, 0, 24},
   };
-#else
-  std::vector<std::string> simulatorMachines = {"localhost", "audio.1g", "ar01.1g"};
-#endif
+  std::vector<std::string> simulatorMachines = {"localhost", "audio.1g",
+                                                "ar01.1g"};
 
   void onInit() override {
-//    decorated(false);
+    //    decorated(false);
   }
 
   void onCreate() override {
     al::imguiInit();
 
-    mute.registerChangeCallback([&](float value) {
-      setMute(value == 1.0f);
-    });
+    mute.registerChangeCallback([&](float value) { setMute(value == 1.0f); });
 
     volumeUp.registerChangeCallback([&](float /*value*/) {
       volume++;
@@ -59,12 +53,13 @@ struct MyApp : App {
     });
   }
 
-  void onAnimate(double dt) {
+  void onAnimate(double dt) override {
 
     al::imguiBeginFrame();
-    ImGui::SetNextWindowPos(ImVec2(0,0));
+    ImGui::SetNextWindowPos(ImVec2(0, 0));
     ImGui::SetNextWindowSize(ImVec2(width(), height()));
-    ImGui::Begin("MOTU Control", nullptr, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize );
+    ImGui::Begin("MOTU Control", nullptr,
+                 ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize);
 
     ImGui::SetWindowFontScale(5.0);
 
@@ -82,15 +77,13 @@ struct MyApp : App {
     al::imguiEndFrame();
   }
 
-  void onDraw(Graphics& g) override {
+  void onDraw(Graphics &g) override {
     g.clear(0, 0, 0);
 
     al::imguiDraw();
   }
 
-  void onExit() override {
-      ParameterGUI::cleanup();
-  }
+  void onExit() override { ParameterGUI::cleanup(); }
 
 #ifdef USE_CURL
 
@@ -103,7 +96,7 @@ struct MyApp : App {
   void setMute(bool isMute) {
     if (isMute) {
 #ifdef USE_CURL
-      for (auto device: devices) {
+      for (auto device : devices) {
         for (size_t i = 0; i < device.numChannels; i++) {
           std::string address = "http://" + device.host + "/datastore/ext/";
           address += "obank/" + std::to_string(device.bankIndex) + "/";
@@ -113,61 +106,76 @@ struct MyApp : App {
         }
       }
 #else
-      for (auto host: simulatorMachines) {
-        osc::Send sender(9010, host.c_str());
-        std::string address = "/alloapp/audio/gain";
-        sender.send(address, 0.0f);
+      for (const auto &device : devices) {
+        osc::Send sender;
+        if (sender.open(device.oscPort, device.host.c_str()))
+          for (size_t i = 0; i < device.numChannels; i++) {
+
+            std::string address = "/ext/";
+            address += "obank/" + std::to_string(device.bankIndex) + "/";
+            address += "ch/" + std::to_string(i) + "/trim";
+            sender.send(address, 0.0f);
+          }
       }
 #endif
     } else {
       sendVolume();
     }
-
   }
 
   void sendVolume() {
 #ifdef USE_CURL
-    for (auto device: devices) {
+    for (auto device : devices) {
       for (size_t i = 0; i < device.numChannels; i++) {
 
         std::string address = "http://" + device.host + "/datastore/ext/";
         address += "obank/" + std::to_string(device.bankIndex) + "/";
         address += "ch/" + std::to_string(i) + "/trim";
-        std::string data = "json={\"value\":" + std::to_string(int(volume)) + "}" ;
+        std::string data =
+            "json={\"value\":" + std::to_string(int(volume)) + "}";
         httpPost(address, data);
 #else
 
-    for (auto host: simulatorMachines) {
-      osc::Send sender(9010, host.c_str());
-      std::string address = "/alloapp/audio/gain";
-      sender.send(address,20.0f * std::powf(10.0f, volume/ 20.0f));
-    }
-#endif
-  }
+    for (const auto &device : devices) {
+      osc::Send sender;
+      if (sender.open(device.oscPort, device.host.c_str())) {
 
-  void setLevel(float level) {
-    volume = level;
-    sendVolume();
-  }
+        for (size_t i = 0; i < device.numChannels; i++) {
+          std::string address = "/ext/";
+          address += "obank/" + std::to_string(device.bankIndex) + "/";
+          address += "ch/" + std::to_string(i) + "/trim";
+          sender.send(address, 20.0f * std::powf(10.0f, volume / 20.0f));
+        }
+      }
+    }
+
+#endif
+      }
+
+      void setLevel(float level) {
+        volume = level;
+        sendVolume();
+      }
 
 #ifdef USE_CURL
-  // HTTP requests
-  void httpPost(std::string address, std::string data) {
-      CURL *curl_handle;
-      CURLcode res;
+      // HTTP requests
+      void httpPost(std::string address, std::string data) {
+        CURL *curl_handle;
+        CURLcode res;
 
-      curl_global_init(CURL_GLOBAL_ALL);
+        curl_global_init(CURL_GLOBAL_ALL);
 
-      curl_handle = curl_easy_init();
-      curl_easy_setopt(curl_handle, CURLOPT_URL, address.c_str());
-//      curl_easy_setopt(curl_handle, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
-//      curl_easy_setopt(curl_handle, CURLOPT_WRITEDATA, (void *)&chunk);
-      curl_easy_setopt(curl_handle, CURLOPT_POSTFIELDS, data.data());
-      curl_easy_setopt(curl_handle, CURLOPT_POSTFIELDSIZE, -1L);
-      curl_easy_setopt(curl_handle, CURLOPT_USERAGENT, "libcurl-agent/1.0");
+        curl_handle = curl_easy_init();
+        curl_easy_setopt(curl_handle, CURLOPT_URL, address.c_str());
+        //      curl_easy_setopt(curl_handle, CURLOPT_WRITEFUNCTION,
+        //      WriteMemoryCallback); curl_easy_setopt(curl_handle,
+        //      CURLOPT_WRITEDATA, (void *)&chunk);
+        curl_easy_setopt(curl_handle, CURLOPT_POSTFIELDS, data.data());
+        curl_easy_setopt(curl_handle, CURLOPT_POSTFIELDSIZE, -1L);
+        curl_easy_setopt(curl_handle, CURLOPT_USERAGENT, "libcurl-agent/1.0");
 
-      res = curl_easy_perform(curl_handle);
-  }
+        res = curl_easy_perform(curl_handle);
+      }
 
 //  static size_t
 //  WriteMemoryCallback(void *contents, size_t size, size_t nmemb, void *userp)
@@ -191,13 +199,10 @@ struct MyApp : App {
 //    return realsize;
 //  }
 #endif
+    };
 
-};
-
-int main() {
-  MyApp app;
-  app.dimensions(600, 400);
-  app.start();
-}
-
-
+    int main() {
+      MyApp app;
+      app.dimensions(600, 400);
+      app.start();
+    }
