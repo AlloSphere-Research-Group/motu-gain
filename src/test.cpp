@@ -98,7 +98,7 @@ struct MyApp : App {
                                  std::to_string(device.bankIndex) + "/ch/" +
                                  std::to_string(i) + "/trim\" : -60}";
           std::string command =
-              "curl --data \"json=" + jsonData + "\" " + address;
+              "curl --data 'json=" + jsonData + "' " + address;
           system(command.c_str());
         }
       }
@@ -130,8 +130,7 @@ struct MyApp : App {
                                std::to_string(device.bankIndex) + "/ch/" +
                                std::to_string(i) +
                                "/trim\" : " + std::to_string(int(volume)) + "}";
-        std::string command =
-            "curl --data \"json=" + jsonData + "\" " + address;
+        std::string command = "curl --data 'json=" + jsonData + "' " + address;
         system(command.c_str());
       }
     }
