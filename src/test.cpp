@@ -27,9 +27,9 @@ struct MyApp : App {
   Trigger volumeDown{"Down"};
 
   std::vector<AVBDevice> devices = {
-      {"motu00.1g", 9998, 0, 16},
-      {"motu01.1g", 9998, 0, 24},
-      {"motu02.1g", 9998, 0, 24},
+      {"169.254.203.42", 9998, 0, 16},
+      {"169.254.156.178", 9998, 0, 24},
+      {"169.254.124.144", 9998, 0, 24},
   };
   std::vector<std::string> simulatorMachines = {"localhost", "audio.1g",
                                                 "ar01.1g"};
