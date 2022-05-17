@@ -73,6 +73,10 @@ struct MyApp : App {
       volume--;
       sendVolume();
     });
+
+    minus18.registerChangeCallback([&](float /*value*/) { setLevel(-18); });
+    minus12.registerChangeCallback([&](float /*value*/) { setLevel(-12); });
+    minus6.registerChangeCallback([&](float /*value*/) { setLevel(-6); });
   }
 
   void onAnimate(double dt) override {}
