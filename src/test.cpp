@@ -1,6 +1,7 @@
 #include <iostream>
 
 #include "al/app/al_App.hpp"
+#include "al/app/al_GUIDomain.hpp"
 #include "al/ui/al_ParameterGUI.hpp"
 
 #define USE_CURL
@@ -20,6 +21,9 @@ struct MyApp : App {
   Trigger volumeUp{"Up"};
   float volume = -12.0;
   Trigger volumeDown{"Down"};
+  Trigger minus18{"-18dB"};
+  Trigger minus12{"-12dB"};
+  Trigger minus6{"-6dB"};
 
   std::vector<AVBDevice> devices = {
       {"16A.local", 9998, 0, 16},
@@ -30,11 +34,34 @@ struct MyApp : App {
                                                 "ar01.1g"};
 
   void onInit() override {
-    //    decorated(false);
+    auto guiDomain = GUIDomain::enableGUI(defaultWindowDomain());
+    auto panel = guiDomain->newPanel();
+    panel->setFlags(ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize);
+    panel->guiConfigurationCode = [this, panel]() {
+      panel->setDimensions(width(), height());
+    };
+    panel->guiCode = [this]() {
+      ImGui::SetWindowFontScale(5.0);
+
+      ImGui::PushItemWidth(width());
+      ParameterGUI::draw(&mute);
+      if (mute != 1.0f) {
+        ParameterGUI::draw(&volumeDown);
+        ImGui::SameLine();
+        ImGui::Text("%i", int(volume));
+        ImGui::SameLine();
+        ParameterGUI::draw(&volumeUp);
+      }
+
+      ParameterGUI::draw(&minus6);
+      ImGui::SameLine();
+      ParameterGUI::draw(&minus12);
+      ImGui::SameLine();
+      ParameterGUI::draw(&minus18);
+    };
   }
 
   void onCreate() override {
-    al::imguiInit();
 
     mute.registerChangeCallback([&](float value) { setMute(value == 1.0f); });
 
@@ -48,35 +75,9 @@ struct MyApp : App {
     });
   }
 
-  void onAnimate(double dt) override {
+  void onAnimate(double dt) override {}
 
-    al::imguiBeginFrame();
-    ImGui::SetNextWindowPos(ImVec2(0, 0));
-    ImGui::SetNextWindowSize(ImVec2(width(), height()));
-    ImGui::Begin("MOTU Control", nullptr,
-                 ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize);
-
-    ImGui::SetWindowFontScale(5.0);
-
-    ImGui::PushItemWidth(width());
-    ParameterGUI::draw(&mute);
-    if (mute != 1.0f) {
-      ParameterGUI::draw(&volumeDown);
-      ImGui::SameLine();
-      ImGui::Text("%i", int(volume));
-      ImGui::SameLine();
-      ParameterGUI::draw(&volumeUp);
-    }
-
-    ImGui::End();
-    al::imguiEndFrame();
-  }
-
-  void onDraw(Graphics &g) override {
-    g.clear(0, 0, 0);
-
-    al::imguiDraw();
-  }
+  void onDraw(Graphics &g) override { g.clear(0, 0, 0); }
 
   void onExit() override {}
 
@@ -91,7 +92,7 @@ struct MyApp : App {
   void setMute(bool isMute) {
     if (isMute) {
 #ifdef USE_CURL
-      for (auto device : devices) {
+      for (const auto &device : devices) {
         for (size_t i = 0; i < device.numChannels; i++) {
           std::string address = device.host + "/datastore";
           std::string jsonData = "{ \"ext/obank/" +
@@ -122,7 +123,7 @@ struct MyApp : App {
 
   void sendVolume() {
 #ifdef USE_CURL
-    for (auto device : devices) {
+    for (const auto &device : devices) {
       for (size_t i = 0; i < device.numChannels; i++) {
 
         std::string address = device.host + "/datastore";
