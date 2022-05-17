@@ -51,13 +51,12 @@ struct MyApp : App {
         ImGui::Text("%i", int(volume));
         ImGui::SameLine();
         ParameterGUI::draw(&volumeUp);
+        ParameterGUI::draw(&minus6);
+        ImGui::SameLine();
+        ParameterGUI::draw(&minus12);
+        ImGui::SameLine();
+        ParameterGUI::draw(&minus18);
       }
-
-      ParameterGUI::draw(&minus6);
-      ImGui::SameLine();
-      ParameterGUI::draw(&minus12);
-      ImGui::SameLine();
-      ParameterGUI::draw(&minus18);
     };
   }
 
