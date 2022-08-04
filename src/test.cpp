@@ -15,7 +15,7 @@ struct AVBDevice {
 
 using namespace al;
 
-struct MyApp : App {
+struct MyApp {
 
   ParameterBool mute{"Mute"};
   Trigger volumeUp{"Up"};
@@ -30,20 +30,29 @@ struct MyApp : App {
       {"24Ao.local", 9998, 0, 24},
       {"24Ao-2.local", 9998, 0, 24},
   };
-  std::vector<std::string> simulatorMachines = {"localhost", "audio.1g",
-                                                "ar01.1g"};
 
-  void onInit() override {
-    auto guiDomain = GUIDomain::enableGUI(defaultWindowDomain());
+  std::shared_ptr<OpenGLGraphicsDomain> mOpenGLGraphicsDomain;
+
+  void start() {
+
+    // Create OpenGL domain
+    mOpenGLGraphicsDomain = std::make_shared<OpenGLGraphicsDomain>();
+    mOpenGLGraphicsDomain->init();
+    // Create window
+    auto window = mOpenGLGraphicsDomain->newWindow();
+    window->window().dimensions(600, 400);
+    window->onDraw = [](Graphics &g) { g.clear(0.0f); };
+    // Create GUI domain
+    auto guiDomain = GUIDomain::enableGUI(window);
     auto panel = guiDomain->newPanel();
-    panel->setFlags(ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize);
-    panel->guiConfigurationCode = [this, panel]() {
-      panel->setDimensions(width(), height());
-    };
-    panel->guiCode = [this]() {
+    panel->setFlags(ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize |
+                    ImGuiWindowFlags_NoMove);
+    panel->configure(0, 0, "AlloGain");
+    panel->fixedPosition(true);
+    panel->guiCode = [&]() {
+      panel->setDimensions(window->window().width(), window->window().height());
       ImGui::SetWindowFontScale(5.0);
 
-      ImGui::PushItemWidth(width());
       ParameterGUI::draw(&mute);
       if (mute != 1.0f) {
         ParameterGUI::draw(&volumeDown);
@@ -58,11 +67,6 @@ struct MyApp : App {
         ParameterGUI::draw(&minus18);
       }
     };
-  }
-
-  void onCreate() override {
-
-    mute.registerChangeCallback([&](float value) { setMute(value == 1.0f); });
 
     volumeUp.registerChangeCallback([&](float /*value*/) {
       volume++;
@@ -76,13 +80,11 @@ struct MyApp : App {
     minus18.registerChangeCallback([&](float /*value*/) { setLevel(-18); });
     minus12.registerChangeCallback([&](float /*value*/) { setLevel(-12); });
     minus6.registerChangeCallback([&](float /*value*/) { setLevel(-6); });
+
+    mOpenGLGraphicsDomain->start();
+
+    mOpenGLGraphicsDomain->cleanup();
   }
-
-  void onAnimate(double dt) override {}
-
-  void onDraw(Graphics &g) override { g.clear(0, 0, 0); }
-
-  void onExit() override {}
 
 #ifdef USE_CURL
 
@@ -207,10 +209,5 @@ struct MyApp : App {
 
 int main() {
   MyApp app;
-  app.configureAudio(48000, 512, 0,
-                     0); // 0 channels makes the domain not run
-  app.oscDomain()
-      ->disableHandshakeServer(); // To let other Allo apps start the server
-  app.dimensions(600, 400);
   app.start();
 }
